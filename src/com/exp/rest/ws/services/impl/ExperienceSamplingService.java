@@ -13,6 +13,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Date;
 
 public class ExperienceSamplingService implements IExperienceSamplingService {
 
@@ -25,12 +26,12 @@ public class ExperienceSamplingService implements IExperienceSamplingService {
 
 		ExperienceSample experienceSampleSubmitted = data.fromJson(requestBody, ExperienceSample.class);
 
-		System.out.println(experienceSampleSubmitted.getAppStillWorks());
+		System.out.println(experienceSampleSubmitted.getPackage_name());
 
-		String insertTableSQL = "INSERT INTO COWISE_RESPONSES "
-				+ " (QUESTION_ID, USER_ID, SELECTED_OPTION, COUNTRY_CODE) "
+		String insertTableSQL = "INSERT INTO EXP_SAMPLE "
+				+ " (PARTICIPANT_ID, PACKAGE_NAME) "
 				+ " VALUES "
-				+ " (?,?,?,?) ";			
+				+ " (?,?) ";			
 
 		Connection connection = null;
 
@@ -42,12 +43,11 @@ public class ExperienceSamplingService implements IExperienceSamplingService {
 			return -1;
 		}
 		try {
+			Date now = new Date();
 			PreparedStatement pst = connection.prepareStatement(insertTableSQL);
-			pst.setString(1, experienceSampleSubmitted.getAppStillWorks());
-			pst.setString(2, experienceSampleSubmitted.getAppStillWorks());
-			pst.setString(3, experienceSampleSubmitted.getAppStillWorks());
-			pst.setString(4, "IN");
-
+			pst.setString(1, now.getTime()+"");
+			pst.setString(2, experienceSampleSubmitted.getPackage_name());
+			
 			pst .executeUpdate();
 
 			/**
