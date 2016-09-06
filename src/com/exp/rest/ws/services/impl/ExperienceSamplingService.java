@@ -29,9 +29,11 @@ public class ExperienceSamplingService implements IExperienceSamplingService {
 		System.out.println(experienceSampleSubmitted.getPackage_name());
 
 		String insertTableSQL = "INSERT INTO EXP_SAMPLE "
-				+ " (PARTICIPANT_ID, PACKAGE_NAME) "
+				+ " ( "
+				+ " PARTICIPANT_ID, APP_LABEL, PACKAGE_NAME, APP_VERSION_CODE, HOST, PATH, FILTERED_DATA, TYPE_OF_DATA, DUMMY_DATA_GOOD, APP_WORKS_POST_FILTERING "
+				+ " ) "
 				+ " VALUES "
-				+ " (?,?) ";			
+				+ " (?,?,?,?,?,?,?,?,?,?) ";			
 
 		Connection connection = null;
 
@@ -43,10 +45,19 @@ public class ExperienceSamplingService implements IExperienceSamplingService {
 			return -1;
 		}
 		try {
-			Date now = new Date();
+
 			PreparedStatement pst = connection.prepareStatement(insertTableSQL);
-			pst.setString(1, now.getTime()+"");
-			pst.setString(2, experienceSampleSubmitted.getPackage_name());
+			
+			pst.setString(1, experienceSampleSubmitted.getParticipant_id());//Mandatory Fields
+			pst.setString(2, experienceSampleSubmitted.getApp_label());
+			pst.setString(3, experienceSampleSubmitted.getPackage_name());//Mandatory Fields
+			pst.setString(4, experienceSampleSubmitted.getApp_versioncode());
+			pst.setString(5, experienceSampleSubmitted.getApp_host());
+			pst.setString(6, experienceSampleSubmitted.getApp_hostpath());
+			pst.setString(7, experienceSampleSubmitted.getDummy_value());//Mandatory Fields
+			pst.setString(8, experienceSampleSubmitted.getTypeof_filtereddata());
+			pst.setString(9, experienceSampleSubmitted.getFiltering_ok());
+			pst.setString(10, experienceSampleSubmitted.getFilteredapp_worksok());
 			
 			pst .executeUpdate();
 
