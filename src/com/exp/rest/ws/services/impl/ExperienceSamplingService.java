@@ -1,19 +1,27 @@
 package com.exp.rest.ws.services.impl;
 
-import static com.exp.rest.ws.Constants.DB_URL;
+import static com.exp.rest.ws.Constants.DB_URL_EXP_SAMPLE;
+import static com.exp.rest.ws.Constants.DB_URL_PRIVACYPROXY;
 import static com.exp.rest.ws.Constants.MYSQL_PASSWORD;
 import static com.exp.rest.ws.Constants.MYSQL_USER;
 
+import com.exp.rest.ws.model.AppDetailsTelemetry;
 import com.exp.rest.ws.model.ExperienceSample;
 import com.exp.rest.ws.services.IExperienceSamplingService;
+import com.exp.rest.ws.util.Sha256;
 import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.lang.reflect.Type;
 
 public class ExperienceSamplingService implements IExperienceSamplingService {
 
@@ -38,7 +46,7 @@ public class ExperienceSamplingService implements IExperienceSamplingService {
 		Connection connection = null;
 
 		try {
-			connection = DriverManager.getConnection(DB_URL, MYSQL_USER, MYSQL_PASSWORD);
+			connection = DriverManager.getConnection(DB_URL_EXP_SAMPLE, MYSQL_USER, MYSQL_PASSWORD);
 
 		} catch (SQLException e) {
 			e.printStackTrace();
@@ -47,7 +55,7 @@ public class ExperienceSamplingService implements IExperienceSamplingService {
 		try {
 
 			PreparedStatement pst = connection.prepareStatement(insertTableSQL);
-			
+
 			pst.setString(1, experienceSampleSubmitted.getParticipant_id());//Mandatory Fields
 			pst.setString(2, experienceSampleSubmitted.getApp_label());
 			pst.setString(3, experienceSampleSubmitted.getPackage_name());//Mandatory Fields
@@ -58,7 +66,7 @@ public class ExperienceSamplingService implements IExperienceSamplingService {
 			pst.setString(8, experienceSampleSubmitted.getTypeof_filtereddata());
 			pst.setString(9, experienceSampleSubmitted.getFiltering_ok());
 			pst.setString(10, experienceSampleSubmitted.getFilteredapp_worksok());
-			
+
 			pst .executeUpdate();
 
 			/**
@@ -71,6 +79,232 @@ public class ExperienceSamplingService implements IExperienceSamplingService {
 			return -1;
 		}
 		return 0;
+	}
+
+	@Override
+	public String updateFromPrivacyProxySignatures(String updateKey) {
+
+		String updateTimeStamp = getLastUpdateTime();
+		if (updateTimeStamp.equals("-107"))
+			return "Unable to Update, Exception Occured.";
+
+		String signatureKeySQL = " SELECT `key` "
+				+ " FROM public_signatures ";
+		if (updateTimeStamp != null && !updateTimeStamp.equals("")) {
+			signatureKeySQL += " WHERE last_update > ? ";
+		}
+
+		Connection connection = null;
+		ResultSet rs = null;
+		HashMap <String, ExperienceSample> keyMapping = new HashMap<>();
+
+		try {
+			connection = DriverManager.getConnection(DB_URL_PRIVACYPROXY, MYSQL_USER, MYSQL_PASSWORD);
+
+			PreparedStatement pst = connection.prepareStatement(signatureKeySQL);
+			if (updateTimeStamp != null && !updateTimeStamp.equals("")) {
+				pst.setString(1, updateTimeStamp);
+			}
+			rs =  pst.executeQuery();
+			while(rs.next()) {
+				String key = rs.getString(1);
+				System.out.println("Key: " + key);
+
+				String[] keySplit = key.split("_");
+
+				ExperienceSample sample = new ExperienceSample();
+				//Example Key HTTP_play.googleapis.com_/log_POST_com.google.android.gsf.login_18
+
+				sample.setApp_host(keySplit[1]);
+				String hostPath = "";
+				for (int i=2; i < keySplit.length - 3; i++){
+					hostPath += keySplit[i];
+				}
+				sample.setApp_hostpath(hostPath);
+				sample.setRequest_type(keySplit[keySplit.length - 3]);
+				sample.setPackage_name(keySplit[keySplit.length - 2]);
+				sample.setApp_versioncode(keySplit[keySplit.length - 1]);
+
+				keyMapping.put(Sha256.hash256(key), sample);
+			}
+
+			insertIntoAppSignatureTbl(keyMapping);
+
+			/**
+			 * Close DB connection
+			 */
+			connection.close();
+
+		} catch (SQLException e2) {
+			e2.printStackTrace();
+			return "Unable to Update, Exception Occured.";
+		}
+
+		return "Update Successful";
+	}
+
+	private String insertIntoAppSignatureTbl(HashMap<String, ExperienceSample> keyMapping) {
+
+		String insertTableSQL = "INSERT INTO APP_SIGNATURE "
+				+ " ( "
+				+ " HASH_SIGNATURE_KEY, PACKAGE_NAME, APP_VERSION_CODE, HOST_URL, HOST_PATH, REQUEST_TYPE "
+				+ " ) "
+				+ " VALUES "
+				+ " (?,?,?,?,?,?) ";			
+
+		Connection connection = null;
+
+		try {
+			connection = DriverManager.getConnection(DB_URL_EXP_SAMPLE, MYSQL_USER, MYSQL_PASSWORD);
+
+			PreparedStatement pst = connection.prepareStatement(insertTableSQL);
+
+			Map<String, ExperienceSample> map = keyMapping;
+			for(Entry<String, ExperienceSample> e: map.entrySet()){
+				ExperienceSample sample = e.getValue();
+				pst.setString(1, e.getKey());
+				pst.setString(2, sample.getPackage_name());
+				pst.setString(3, sample.getApp_versioncode());
+				pst.setString(4, sample.getApp_host());
+				pst.setString(5, sample.getApp_hostpath());
+				pst.setString(6, sample.getRequest_type());
+				pst .executeUpdate();
+			}
+
+			/**
+			 * Close DB connection
+			 */
+			connection.close();
+
+		} catch (SQLException e2) {
+			e2.printStackTrace();
+			return "Unable to Update, Exception Occured.";
+		}
+		return "Success";
+	}
+
+	private String getLastUpdateTime() {
+		String lastUpdateTime = "";
+
+		String lastUpdateSQL = " SELECT DISTINCT LAST_UPDATE "
+				+ " FROM APP_SIGNATURE "
+				+ " ORDER BY LAST_UPDATE DESC "
+				+ " LIMIT 1 ";
+
+		Connection connection = null;
+		ResultSet rs = null;
+		try {
+			connection = DriverManager.getConnection(DB_URL_EXP_SAMPLE, MYSQL_USER, MYSQL_PASSWORD);
+
+			PreparedStatement pst = connection.prepareStatement(lastUpdateSQL);
+			rs =  pst.executeQuery();
+
+			if(rs.next()) {
+				lastUpdateTime = rs.getString(1);
+			}
+
+			/**
+			 * Close DB connection
+			 */
+			connection.close();
+
+		} catch (SQLException e2) {
+			e2.printStackTrace();
+			return "-107";
+		}
+		return lastUpdateTime;
+	}
+
+	@Override
+	public int submitAppDetailsTelemetry(String requestBody) {
+
+
+		System.out.print("Submiting App Details Telemetry \n, Request well formed: " + requestBody );
+
+		Gson data =  new Gson();
+		try {
+
+			Type type = new TypeToken<List<AppDetailsTelemetry>>(){}.getType();
+			List<AppDetailsTelemetry> inpList = data.fromJson(requestBody, type);
+
+			AppDetailsTelemetry[] telemetrySamplesSubmitted = inpList.toArray(new AppDetailsTelemetry[inpList.size()]);
+
+
+			String insertTableSQL = "REPLACE INTO APP_DETAILS_TELEMETRY "
+					+ " ( "
+					+ " PARTICIPANT_ID, PACKAGE_NAME, APP_VERSION_CODE, INTERNET_REQUESTS, LEAKY_REQUESTS, REMOTE_HOSTS"
+					+ " ) "
+					+ " VALUES "
+					+ " (?,?,?,?,?,?) ";			
+
+			Connection connection = null;
+
+			connection = DriverManager.getConnection(DB_URL_EXP_SAMPLE, MYSQL_USER, MYSQL_PASSWORD);
+
+
+			PreparedStatement pst = connection.prepareStatement(insertTableSQL);
+			for (AppDetailsTelemetry app :  telemetrySamplesSubmitted) {
+
+				pst.setString(1, app.participant_id);
+				pst.setString(2, app.package_name);
+				pst.setString(3, app.app_version_code);
+				pst.setString(4, app.internet_requests);
+				pst.setString(5, app.leaky_requests);
+				pst.setString(6, app.remote_hosts);
+
+				pst .executeUpdate();				
+			}
+
+			/**
+			 * Close DB connection
+			 */
+			connection.close();
+		} catch (Exception e2) {
+			e2.printStackTrace();
+			return -1;
+		}
+
+		//Once the data is update the server whitelist should be reconsidered and updated
+		updateServerWhiteList();
+
+		return 0;		
+	}
+
+	private void updateServerWhiteList() { 
+
+	}
+
+	private AppDetailsTelemetry getAppDetailsTelemetryData() {
+		String lastUpdateTime = "";
+
+		String lastUpdateSQL = " SELECT DISTINCT LAST_UPDATE "
+				+ " FROM APP_SIGNATURE "
+				+ " ORDER BY LAST_UPDATE DESC "
+				+ " LIMIT 1 ";
+
+		Connection connection = null;
+		ResultSet rs = null;
+		try {
+			connection = DriverManager.getConnection(DB_URL_EXP_SAMPLE, MYSQL_USER, MYSQL_PASSWORD);
+
+			PreparedStatement pst = connection.prepareStatement(lastUpdateSQL);
+			rs =  pst.executeQuery();
+
+			if(rs.next()) {
+				lastUpdateTime = rs.getString(1);
+			}
+
+			/**
+			 * Close DB connection
+			 */
+			connection.close();
+
+		} catch (SQLException e2) {
+			e2.printStackTrace();
+			return "-107";
+		}
+		return lastUpdateTime;
+
 	}
 
 }

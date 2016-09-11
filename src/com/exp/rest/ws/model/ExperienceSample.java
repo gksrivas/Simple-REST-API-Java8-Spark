@@ -7,6 +7,7 @@ public class ExperienceSample {
 	private String app_versioncode;
 	private String app_host;
 	private String app_hostpath;
+	private String request_type;
 	private String typeof_filtereddata;
 	private String dummy_value;
 	private String filtering_ok;
@@ -90,5 +91,13 @@ public class ExperienceSample {
 
 	public void setFilteredapp_worksok(String filteredapp_worksok) {
 		this.filteredapp_worksok = filteredapp_worksok;
+	}
+
+	public String getRequest_type() {
+		return request_type;
+	}
+
+	public void setRequest_type(String request_type) {
+		this.request_type = request_type;
 	}
 }
