@@ -17,6 +17,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -218,7 +219,6 @@ public class ExperienceSamplingService implements IExperienceSamplingService {
 	@Override
 	public int submitAppDetailsTelemetry(String requestBody) {
 
-
 		System.out.print("Submiting App Details Telemetry \n, Request well formed: " + requestBody );
 
 		Gson data =  new Gson();
@@ -263,35 +263,40 @@ public class ExperienceSamplingService implements IExperienceSamplingService {
 			e2.printStackTrace();
 			return -1;
 		}
-
-		//Once the data is update the server whitelist should be reconsidered and updated
-		updateServerWhiteList();
-
 		return 0;		
 	}
 
-	private void updateServerWhiteList() { 
+	@Override
+	public AppDetailsTelemetry[] getServerWhitelist() {
 
-	}
-
-	private AppDetailsTelemetry getAppDetailsTelemetryData() {
-		String lastUpdateTime = "";
-
-		String lastUpdateSQL = " SELECT DISTINCT LAST_UPDATE "
-				+ " FROM APP_SIGNATURE "
-				+ " ORDER BY LAST_UPDATE DESC "
-				+ " LIMIT 1 ";
+		String serverWhitelistSQL = " SELECT PACKAGE_NAME, APP_VERSION_CODE, count(1) as NUM_USERS, SUM(INTERNET_REQUESTS), SUM(LEAKY_REQUESTS) "
+				+ " FROM APP_DETAILS_TELEMETRY "
+				+ " GROUP BY PACKAGE_NAME, APP_VERSION_CODE ";
 
 		Connection connection = null;
 		ResultSet rs = null;
+		ArrayList<AppDetailsTelemetry> whiteList = new ArrayList<>();
+
 		try {
 			connection = DriverManager.getConnection(DB_URL_EXP_SAMPLE, MYSQL_USER, MYSQL_PASSWORD);
 
-			PreparedStatement pst = connection.prepareStatement(lastUpdateSQL);
+			PreparedStatement pst = connection.prepareStatement(serverWhitelistSQL);
 			rs =  pst.executeQuery();
 
-			if(rs.next()) {
-				lastUpdateTime = rs.getString(1);
+
+			while(rs.next()) {
+				if(rs.getInt(4) > 50 && rs.getInt(5) <= 5) {
+
+					String packageName = rs.getString(1);
+					String appVersionCode = rs.getString(2);
+					System.out.println("PackageName: " + packageName + " --> " + appVersionCode);
+
+					AppDetailsTelemetry whiteListApp = new AppDetailsTelemetry();
+					whiteListApp.package_name = packageName;
+					whiteListApp.app_version_code = appVersionCode;
+					whiteListApp.num_users = rs.getString(3);
+					whiteList.add(whiteListApp);
+				}
 			}
 
 			/**
@@ -301,10 +306,10 @@ public class ExperienceSamplingService implements IExperienceSamplingService {
 
 		} catch (SQLException e2) {
 			e2.printStackTrace();
-			return "-107";
-		}
-		return lastUpdateTime;
+			return null;
+		}	
 
+		return whiteList.toArray(new AppDetailsTelemetry[whiteList.size()]);
 	}
 
 }

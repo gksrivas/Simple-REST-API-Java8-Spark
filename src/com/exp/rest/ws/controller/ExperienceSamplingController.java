@@ -36,6 +36,17 @@ public class ExperienceSamplingController  extends AbstractController {
 				
 				} , json());
 				
+				//Update APP_SIGNATURE Table from PrivacyProxy DB
+				get("/server-whitelist/:user_token", (req, res) -> {	
+					final String updateToken = req.params(":user_token");
+					if (updateToken.equals("1234")) {
+						return experienceSamplingService.getServerWhitelist();						
+					} else {
+						return null;
+					}
+				
+				} , json());
+				
 				after((req, res) -> {
 					res.header("Access-Control-Allow-Origin", "*");
 					res.header("Access-Control-Allow-Headers", "X-Requested-With");

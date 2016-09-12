@@ -7,4 +7,5 @@ public class AppDetailsTelemetry {
 	public String internet_requests;
 	public String leaky_requests;
 	public String remote_hosts;
+	public String num_users;
 }
